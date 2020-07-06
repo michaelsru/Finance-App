@@ -27,6 +27,7 @@ import smtplib, ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+import os
 
 def generate_rsi_plot(ticker):
     fig, ax1 = plt.subplots()
@@ -48,15 +49,16 @@ def generate_rsi_plot(ticker):
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.title('RSI vs HIGH for {}'.format(ticker))
     # plt.show()
-    filename = 'graphs/{}_rsi.png'.format(ticker)
+    filename = '{}_rsi.png'.format(ticker)
+    filename = os.path.abspath(filename)
+    print(filename)
     plt.savefig(filename)
     return filename
 
 
 
 # %%
-timeframe = 6
-# tickers = ['DFN.TO', 'V']
+timeframe = 10
 tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'AC', 'OAS', 'PD', 'PLUG', 'XBC.V']
 today = datetime.datetime.now().date()
 
@@ -66,7 +68,6 @@ sender_email = "financeapp1234@gmail.com"  # Enter your address
 receiver_email = "s.michaelru@gmail.com"  # Enter receiver address
 # password = input("Type your password and press enter: ")
 password = 'admin1234ABC'
-# email_msg = ''
 
 message = MIMEMultipart("alternative")
 message["Subject"] = "multipart test"
@@ -79,8 +80,6 @@ html = ''
 
 for ticker in tickers:
     company = yf.Ticker(ticker)
-
-    # msft_ohlc_df = msft.history(period="max", interval='1d', start='2019-10-02', end='2020-01-01')
     ohlc_df = company.history(period="max", interval='60m', start=(today - timedelta(days=timeframe)))
     ohlc_df.index = pd.to_datetime(ohlc_df.index, format='%Y-%M-%d')
     
@@ -89,12 +88,14 @@ for ticker in tickers:
 #     cur_rsi=80
     
     if cur_rsi > 70 or cur_rsi < 30:
+#     if True:
         
         rsi_plot = generate_rsi_plot(ticker)
+        print(rsi_plot)
         
         html += """\
 Ticker:{}</br>
-Current RSI = {:.2f}</br>
+Current RSI:{:.2f}</br>
 <img src="cid:{}"><br>
 """.format(ticker, cur_rsi, rsi_plot)
         
@@ -104,14 +105,10 @@ Current RSI = {:.2f}</br>
         msgImage.add_header('Content-ID', '<{}>'.format(rsi_plot))
         message.attach(msgImage)
 
-        # Define the image's ID as referenced above
-#         msgImage.add_header('Content-ID', '<image1>')
-
-# html += '</body></html>'
-msgText = MIMEText(html, 'html')  
+msgText = MIMEText(html, 'html')
 print(msgText)
-message.attach(msgText)   # Added, and edited the previous line
-# print(message)
+message.attach(msgText)
+
 with smtplib.SMTP_SSL(smtp_server, port) as server:
     server.login(sender_email, password)
     server.sendmail(sender_email, receiver_email, message.as_string())
