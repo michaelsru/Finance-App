@@ -29,7 +29,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import os
 
-def generate_rsi_plot(ticker):
+def generate_rsi_plot(ticker, stock):
     fig, ax1 = plt.subplots()
 
     color = 'tab:red'
@@ -55,62 +55,80 @@ def generate_rsi_plot(ticker):
     plt.savefig(filename)
     return filename
 
+def send_alert_based_on_rsi(cur_rsi, prev_rsi) -> bool:
+    if abs(cur_rsi - prev_rsi) < 10:
+        return False
+    if cur_rsi > 70:
+        return True
+    if cur_rsi < 30:
+        return True
+    if abs(cur_rsi-prev_rsi) > 10:
+        return True
+
 
 
 # %%
-timeframe = 10
-tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'AC', 'OAS', 'PD', 'PLUG', 'XBC.V']
+timeframe = 7
+tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'TSLA', 'OAS', 'PD', 'PLUG', 'XBC.V']
 today = datetime.datetime.now().date()
 
 port = 465  # For SSL
 smtp_server = "smtp.gmail.com"
 sender_email = "financeapp1234@gmail.com"  # Enter your address
-receiver_email = "s.michaelru@gmail.com"  # Enter receiver address
+receiver_email = ['s.michaelru@gmail.com', 'jamesyellowlee61@gmail.com', 'julialee1164@gmail.com']  # Enter receiver address
 # password = input("Type your password and press enter: ")
 password = 'admin1234ABC'
 
-message = MIMEMultipart("alternative")
-message["Subject"] = "multipart test"
-message["From"] = sender_email
-message["To"] = receiver_email
+def email_for_tickers():
+    message = MIMEMultipart("alternative")
+    message["Subject"] = "multipart test"
+    message["From"] = sender_email
 
-text = 'Ticker(s):  '
-plots = []
-html = ''
+    text = 'Ticker(s):  '
+    plots = []
+    html = ''
 
-for ticker in tickers:
-    company = yf.Ticker(ticker)
-    ohlc_df = company.history(period="max", interval='60m', start=(today - timedelta(days=timeframe)))
-    ohlc_df.index = pd.to_datetime(ohlc_df.index, format='%Y-%M-%d')
-    
-    stock = sdf.retype(ohlc_df)
-    cur_rsi = stock['rsi_14'].iloc[-1]
-#     cur_rsi=80
-    
-    if cur_rsi > 70 or cur_rsi < 30:
-#     if True:
-        
-        rsi_plot = generate_rsi_plot(ticker)
-        print(rsi_plot)
-        
-        html += """\
-Ticker:{}</br>
-Current RSI:{:.2f}</br>
-<img src="cid:{}"><br>
-""".format(ticker, cur_rsi, rsi_plot)
-        
-        fp = open('{}'.format(rsi_plot), 'rb')
-        msgImage = MIMEImage(fp.read())
-        fp.close()
-        msgImage.add_header('Content-ID', '<{}>'.format(rsi_plot))
-        message.attach(msgImage)
+    for ticker in tickers:
+        company = yf.Ticker(ticker)
+        ohlc_df = company.history(period="max", interval='5m', start=(today - timedelta(days=timeframe)))
+        ohlc_df.index = pd.to_datetime(ohlc_df.index, format='%Y-%M-%d')
 
-msgText = MIMEText(html, 'html')
-print(msgText)
-message.attach(msgText)
+        stock = sdf.retype(ohlc_df)
+        cur_rsi = stock['rsi_14'].iloc[-1]
+        prev_rsi = stock['rsi_14'].iloc[-2]
+#         TODO: change prev_rsi to prev_emailed_rsi, add array to keep track
+        cur_high = stock['high'].iloc[-1]
 
-with smtplib.SMTP_SSL(smtp_server, port) as server:
-    server.login(sender_email, password)
-    server.sendmail(sender_email, receiver_email, message.as_string())
+        if send_alert_based_on_rsi(cur_rsi, prev_rsi):
+
+            rsi_plot = generate_rsi_plot(ticker, stock)
+            print(rsi_plot)
+
+            html += 'Ticker:{}\nCurrent RSI:{:.2f}</br>High:{}</br><img src="cid:{}">\n'''.format(ticker, cur_rsi, cur_high, rsi_plot)
+
+            fp = open('{}'.format(rsi_plot), 'rb')
+            msgImage = MIMEImage(fp.read())
+            fp.close()
+            msgImage.add_header('Content-ID', '<{}>'.format(rsi_plot))
+            message.attach(msgImage)
+
+    msgText = MIMEText(html, 'html')
+    print(msgText)
+    message.attach(msgText)
+
+    with smtplib.SMTP_SSL(smtp_server, port) as server:
+        server.login(sender_email, password)
+        for rec in receiver_email:
+            message["To"] = rec
+            print(rec)
+            server.sendmail(sender_email, rec, message.as_string())
+
 
 # %%
+import time
+
+while True:
+    localtime = time.localtime()
+    result = time.strftime("%H:%M:%S %p", localtime)
+    email_for_tickers()
+    time.sleep(300)
