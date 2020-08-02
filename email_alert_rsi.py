@@ -68,8 +68,10 @@ def send_alert_based_on_rsi(cur_rsi, prev_rsi) -> bool:
 
 
 # %%
+import numpy as np
+
 timeframe = 7
-tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'TSLA', 'OAS', 'PD', 'PLUG', 'XBC.V']
+tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'TSLA', 'OAS', 'PLUG', 'XBC.V']
 today = datetime.datetime.now().date()
 
 port = 465  # For SSL
@@ -78,6 +80,8 @@ sender_email = "financeapp1234@gmail.com"  # Enter your address
 receiver_email = ['s.michaelru@gmail.com', 'jamesyellowlee61@gmail.com', 'julialee1164@gmail.com']  # Enter receiver address
 # password = input("Type your password and press enter: ")
 password = 'admin1234ABC'
+
+prev_rsi_array = np.zeros((len(tickers),), dtype=int)
 
 def email_for_tickers():
     message = MIMEMultipart("alternative")
@@ -88,21 +92,18 @@ def email_for_tickers():
     plots = []
     html = ''
 
-    for ticker in tickers:
+    for i, ticker in enumerate(tickers):
         company = yf.Ticker(ticker)
         ohlc_df = company.history(period="max", interval='5m', start=(today - timedelta(days=timeframe)))
         ohlc_df.index = pd.to_datetime(ohlc_df.index, format='%Y-%M-%d')
 
         stock = sdf.retype(ohlc_df)
         cur_rsi = stock['rsi_14'].iloc[-1]
-        prev_rsi = stock['rsi_14'].iloc[-2]
-#         TODO: change prev_rsi to prev_emailed_rsi, add array to keep track
         cur_high = stock['high'].iloc[-1]
 
-        if send_alert_based_on_rsi(cur_rsi, prev_rsi):
-
+        if send_alert_based_on_rsi(cur_rsi, prev_rsi_array[i]):
+            prev_rsi_array[i] = cur_rsi
             rsi_plot = generate_rsi_plot(ticker, stock)
-            print(rsi_plot)
 
             html += 'Ticker:{}\nCurrent RSI:{:.2f}</br>High:{}</br><img src="cid:{}">\n'''.format(ticker, cur_rsi, cur_high, rsi_plot)
 
@@ -111,6 +112,9 @@ def email_for_tickers():
             fp.close()
             msgImage.add_header('Content-ID', '<{}>'.format(rsi_plot))
             message.attach(msgImage)
+
+    if html == '':
+        return
 
     msgText = MIMEText(html, 'html')
     print(msgText)
