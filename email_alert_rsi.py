@@ -55,33 +55,32 @@ def generate_rsi_plot(ticker, stock):
     plt.savefig(filename)
     return filename
 
-def send_alert_based_on_rsi(cur_rsi, prev_rsi) -> bool:
-    if abs(cur_rsi - prev_rsi) < 10:
-        return False
-    if cur_rsi > 70:
-        return True
-    if cur_rsi < 30:
-        return True
-    if abs(cur_rsi-prev_rsi) > 10:
-        return True
-
+def send_alert_based_on_rsi(cur_rsi, prev_rsi, cached_rsi) -> bool:
+    if cur_rsi >= 70:
+        if prev_rsi < 70 or abs(cur_rsi - cached_rsi) >= 5:
+            return True
+    if cur_rsi <= 30:
+        if prev_rsi > 30 or abs(cur_rsi - cached_rsi) >= 5:
+            return True
+    return False
 
 
 # %%
 import numpy as np
 
 timeframe = 7
-tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'TSLA', 'OAS', 'PLUG', 'XBC.V']
+tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'TSLA', 'OAS', 'PLUG', 'XBC.V', 'QCOM']
 today = datetime.datetime.now().date()
 
 port = 465  # For SSL
 smtp_server = "smtp.gmail.com"
 sender_email = "financeapp1234@gmail.com"  # Enter your address
 receiver_email = ['s.michaelru@gmail.com', 'jamesyellowlee61@gmail.com', 'julialee1164@gmail.com']  # Enter receiver address
+# receiver_email = ['s.michaelru@gmail.com']  # Enter receiver address
 # password = input("Type your password and press enter: ")
 password = 'admin1234ABC'
 
-prev_rsi_array = np.zeros((len(tickers),), dtype=int)
+cached_rsi = np.full((len(tickers),), 50)
 
 def email_for_tickers():
     message = MIMEMultipart("alternative")
@@ -99,10 +98,11 @@ def email_for_tickers():
 
         stock = sdf.retype(ohlc_df)
         cur_rsi = stock['rsi_14'].iloc[-1]
+        prev_rsi = stock['rsi_14'].iloc[-2]
         cur_high = stock['high'].iloc[-1]
-
-        if send_alert_based_on_rsi(cur_rsi, prev_rsi_array[i]):
-            prev_rsi_array[i] = cur_rsi
+        print("{}: current rsi:{:.2f}, previous rsi:{:.2f}, cached rsi:{}".format(ticker, cur_rsi, prev_rsi, cached_rsi[i]))
+        if send_alert_based_on_rsi(cur_rsi, prev_rsi, cached_rsi[i]):
+            cached_rsi[i] = cur_rsi
             rsi_plot = generate_rsi_plot(ticker, stock)
 
             html += 'Ticker:{}\nCurrent RSI:{:.2f}</br>High:{}</br><img src="cid:{}">\n'''.format(ticker, cur_rsi, cur_high, rsi_plot)
@@ -134,5 +134,6 @@ import time
 while True:
     localtime = time.localtime()
     result = time.strftime("%H:%M:%S %p", localtime)
+    print(result)
     email_for_tickers()
     time.sleep(300)
