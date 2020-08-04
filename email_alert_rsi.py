@@ -16,43 +16,37 @@
 # %%
 import yfinance as yf
 from pandas import DataFrame as df
-from pandas_datareader import data as pdr
 import pandas as pd
 import datetime
 from datetime import timedelta
 from stockstats import StockDataFrame as sdf
 import matplotlib.pyplot as plt
-
 import smtplib, ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import os
+import math
+import numpy as np
 
-def generate_rsi_plot(ticker, stock):
-    fig, ax1 = plt.subplots()
+def generate_rsi_plot(ticker, stock, interval):
+    xtick_freq = math.floor(len(stock)/5)
+    positions = stock.index[::xtick_freq]
 
-    color = 'tab:red'
-    ax1.set_xlabel('Date')
-    ax1.set_ylabel('rsi_14 ($)', color=color)
-    ax1.plot(stock.index, stock['rsi_14'], color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
-    plt.ylim(0,100)
+    fig, axes = plt.subplots(nrows=2, sharex=True)
+    axes[0].plot(stock.index, stock['high'], color='red')
+    axes[0].set_ylabel('high ($)')
+    axes[1].plot(stock.index, stock['rsi_14'], color='blue')
+    axes[1].set_ylabel('rsi_14')
+    axes[1].set_ylim(0,100)
+    plt.xticks(rotation=20)
+    axes[1].set_xticks(positions)
 
-    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
-
-    color = 'tab:blue'
-    ax2.set_ylabel('High', color=color)  # we already handled the x-label with ax1
-    ax2.plot(stock.index, stock['high'], color=color)
-    ax2.tick_params(axis='y', labelcolor=color)
-
-    fig.tight_layout()  # otherwise the right y-label is slightly clipped
-    plt.title('RSI vs HIGH for {}'.format(ticker))
-    # plt.show()
+    fig.suptitle('RSI vs HIGH for {}, {} interval'.format(ticker, interval))
     filename = '{}_rsi.png'.format(ticker)
     filename = os.path.abspath(filename)
     print(filename)
-    plt.savefig(filename)
+    plt.savefig(filename, bbox_inches = 'tight')
     return filename
 
 def send_alert_based_on_rsi(cur_rsi, prev_rsi, cached_rsi) -> bool:
@@ -66,23 +60,18 @@ def send_alert_based_on_rsi(cur_rsi, prev_rsi, cached_rsi) -> bool:
 
 
 # %%
-import numpy as np
-
-timeframe = 7
+timeframe = 5
 tickers = ['DFN.TO', 'V', 'MA', 'FOOD.TO', 'AMD', 'ALK', 'TSLA', 'OAS', 'PLUG', 'XBC.V', 'QCOM']
-today = datetime.datetime.now().date()
 
 port = 465  # For SSL
 smtp_server = "smtp.gmail.com"
 sender_email = "financeapp1234@gmail.com"  # Enter your address
 receiver_email = ['s.michaelru@gmail.com', 'jamesyellowlee61@gmail.com', 'julialee1164@gmail.com']  # Enter receiver address
-# receiver_email = ['s.michaelru@gmail.com']  # Enter receiver address
-# password = input("Type your password and press enter: ")
 password = 'admin1234ABC'
 
 cached_rsi = np.full((len(tickers),), 50)
 
-def email_for_tickers():
+def email_for_tickers(date):
     message = MIMEMultipart("alternative")
     message["Subject"] = "multipart test"
     message["From"] = sender_email
@@ -90,23 +79,23 @@ def email_for_tickers():
     text = 'Ticker(s):  '
     plots = []
     html = ''
+    interval = '30m'
 
     for i, ticker in enumerate(tickers):
         company = yf.Ticker(ticker)
-        ohlc_df = company.history(period="max", interval='5m', start=(today - timedelta(days=timeframe)))
-        ohlc_df.index = pd.to_datetime(ohlc_df.index, format='%Y-%M-%d')
-
+        ohlc_df = company.history(period="max", interval=interval, start=(date - timedelta(days=timeframe)))
         stock = sdf.retype(ohlc_df)
+        stock.index = stock.index.strftime('%Y-%m-%d %H:%M:%S')
+
         cur_rsi = stock['rsi_14'].iloc[-1]
         prev_rsi = stock['rsi_14'].iloc[-2]
         cur_high = stock['high'].iloc[-1]
         print("{}: current rsi:{:.2f}, previous rsi:{:.2f}, cached rsi:{}".format(ticker, cur_rsi, prev_rsi, cached_rsi[i]))
         if send_alert_based_on_rsi(cur_rsi, prev_rsi, cached_rsi[i]):
             cached_rsi[i] = cur_rsi
-            rsi_plot = generate_rsi_plot(ticker, stock)
+            rsi_plot = generate_rsi_plot(ticker, stock, interval)
 
             html += 'Ticker:{}\nCurrent RSI:{:.2f}</br>High:{}</br><img src="cid:{}">\n'''.format(ticker, cur_rsi, cur_high, rsi_plot)
-
             fp = open('{}'.format(rsi_plot), 'rb')
             msgImage = MIMEImage(fp.read())
             fp.close()
@@ -132,8 +121,9 @@ def email_for_tickers():
 import time
 
 while True:
+    date = datetime.datetime.now().date()
     localtime = time.localtime()
     result = time.strftime("%H:%M:%S %p", localtime)
     print(result)
-    email_for_tickers()
+    email_for_tickers(date)
     time.sleep(300)
