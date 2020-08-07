@@ -70,6 +70,7 @@ receiver_email = ['s.michaelru@gmail.com', 'jamesyellowlee61@gmail.com', 'julial
 password = 'admin1234ABC'
 
 cached_rsi = np.full((len(tickers),), 50)
+prev_rsi = np.full((len(tickers),), 50)
 
 def email_for_tickers(date):
     message = MIMEMultipart("alternative")
@@ -83,15 +84,18 @@ def email_for_tickers(date):
 
     for i, ticker in enumerate(tickers):
         company = yf.Ticker(ticker)
-        ohlc_df = company.history(period="max", interval=interval, start=(date - timedelta(days=timeframe)))
+        try:
+            ohlc_df = company.history(period="max", interval=interval, start=(date - timedelta(days=timeframe)))
+        except:
+            print('Error getting company history: date = {}'.format(date))
+            return
         stock = sdf.retype(ohlc_df)
         stock.index = stock.index.strftime('%Y-%m-%d %H:%M:%S')
 
-        cur_rsi = stock['rsi_14'].iloc[-1]
-        prev_rsi = stock['rsi_14'].iloc[-2]
-        cur_high = stock['high'].iloc[-1]
-        print("{}: current rsi:{:.2f}, previous rsi:{:.2f}, cached rsi:{}".format(ticker, cur_rsi, prev_rsi, cached_rsi[i]))
-        if send_alert_based_on_rsi(cur_rsi, prev_rsi, cached_rsi[i]):
+        cur_rsi = stock['rsi_14'].copy().iloc[-1]
+        cur_high = stock['high'].copy().iloc[-1]
+        print("{}: current rsi:{:.2f}, previous rsi:{:.2f}, cached rsi:{}".format(ticker, cur_rsi, prev_rsi[i], cached_rsi[i]))
+        if send_alert_based_on_rsi(cur_rsi, prev_rsi[i], cached_rsi[i]):
             cached_rsi[i] = cur_rsi
             rsi_plot = generate_rsi_plot(ticker, stock, interval)
 
@@ -101,6 +105,8 @@ def email_for_tickers(date):
             fp.close()
             msgImage.add_header('Content-ID', '<{}>'.format(rsi_plot))
             message.attach(msgImage)
+
+        prev_rsi[i] = cur_rsi
 
     if html == '':
         return
