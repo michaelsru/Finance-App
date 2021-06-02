@@ -64,7 +64,7 @@ toml==0.10.1
 tornado==6.0.4
 tqdm==4.46.1
 traitlets==4.3.3
-urllib3==1.25.9
+urllib3==1.26.5
 wcwidth==0.2.3
 webencodings==0.5.1
 yfinance @ git+https://github.com/michaelsru/yfinance.git@f57d2ddbc345c64c2bc682b750782a385b2aacd8
